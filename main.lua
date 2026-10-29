@@ -44,23 +44,32 @@ end)
 
 RegisterKeyBind(Key.F10, function()
 
-    local SaveGame1 = StaticFindObject("/Game/System/BP/SaveLoad/KSSaveDataManagerBP.KSSaveDataManagerBP_C")
+    -- local SaveGame1 = StaticFindObject("/Game/System/BP/SaveLoad/KSSaveDataManagerBP.KSSaveDataManagerBP_C")
+    local SaveGame1 = StaticFindObject("/Game/System/BP/SaveLoad/KSSaveGameBP.KSSaveGameBP_C")
     -- local SaveGame2 = FindFirstOf("KSSaveDataManagerBP")
     local SaveGame2 = SaveGame1:GetCDO()
 
     local Function = StaticFindObject(
-        "/Game/System/BP/SaveLoad/KSSaveDataManagerBP.KSSaveDataManagerBP_C:JoinCharacterToParty"
+        -- "/Game/System/BP/SaveLoad/KSSaveDataManagerBP.KSSaveDataManagerBP_C:JoinCharacterToParty"
+        "/Game/System/BP/SaveLoad/KSSaveGameBP.KSSaveGameBP_C:JoinCharacterToParty"
     )
+
+    local SaveGame3 = FindFirstOf("KSSaveGameBP_C")
 
     local Result = {}
     local IsAddMainMember = {}
 
     -- DiagnosticOnElement(SaveGame1)
     -- DiagnosticOnElement(SaveGame2)
-    DiagnosticOnElement(Function)
+    -- DiagnosticOnElement(SaveGame3)
+    -- DiagnosticOnElement(Function)
 
     -- void JoinCharacterToParty(EPlayableCharacterID CharacterID, bool& Result, bool& IsAddMainMember);
-    -- SaveGame:JoinCharacterToParty(1,Result,IsAddMainMember)
+    -- void SetCharacterHP(int32 CharacterID, int32 HP);
+    SaveGame3:JoinCharacterToParty(1,Result,IsAddMainMember)
+    SaveGame3:SetCharacterHP(1,999)
+    SaveGame3:SetCharacterMP(1,999)
+    SaveGame3:SetCharacterMissionProcessCnt(1,110)
 
 end)
 
@@ -98,7 +107,7 @@ function DiagnosticOnElement(Element)
     if Element and Element:IsValid() then
         print("Full name: " .. tostring(Element:GetFullName()))
         print("Class: " .. tostring(Element:GetClass():GetFullName()))
-        print("Function member: " .. tostring(Element.JoinCharacterToParty))
+        -- print("Function member: " .. tostring(Element.JoinCharacterToParty))
     else 
         print("Not valid")
     end
@@ -132,6 +141,11 @@ function GetLibUIUtilFunctions()
     local LibUIUtilFunctions = StaticFindObject("/Game/Library/LibUIUtil.LibUIUtil_C")
     local LibUIUtilFunctionsCDO = LibUIUtilFunctions:GetCDO()
     return LibUIUtilFunctionsCDO
+end
+
+function GetSaveGame()
+    local SaveGame = FindFirstOf("KSSaveGameBP_C")
+    return SaveGame
 end
 
 function ConvertItemLabelToItemName(ItemLabel)
@@ -190,11 +204,6 @@ function OpenNotifiction(Message)
 end 
 
 function ReceiveItem(ItemLabel,PlayerName)
-    -- local pc = UEHelpers:GetPlayerController() -- required for getting world context
-    -- local __WorldContext = pc:GetWorld() -- required for some functions.
-
-    -- local ItemFunction = StaticFindObject("/Game/Item/BP/ItemFunction.ItemFunction_C")
-    -- local ItemFunctionCDO = ItemFunction:GetCDO()
 
     print("Debug - Item Label received: " .. tostring(ItemLabel))
 
@@ -213,22 +222,6 @@ function ReceiveItem(ItemLabel,PlayerName)
 end
 
 function GetCurrentLevel()
-
-    -- local LevelFunction = GetLevelFunctions()
-    -- void GetMapAndRegionNameByLevelID(int32 LevelID, int32 Selection, class UObject* __WorldContext, FText& RegionName, FText& MapName);
-
-    -- local LevelManager = FindAllOf("LevelManager")
-    -- local LevelManager = StaticFindObject("/Script/Octopath_Traveler.LevelManager")
-    -- local LevelManagerCDO = LevelManager:GetCDO()
-
-    -- FName GetCurrentLevelName();
-    -- int32 GetCurrentLevelDataID();
-    -- local LevelName = LevelManager:GetCurrentLevelName()
-    -- local LevelID = LevelManager:GetCurrentLevelDataID()
-    -- print ("Current Level ID: " .. tostring(LevelManager.CurrentLevelID))
-    -- print("Level Manager : " .. tostring(LevelManager))
-    -- print("Level Name: " .. tostring(LevelName:ToString()))
-    -- print("Level ID: "  .. tostring(LevelID))
 
     local Manager = FindFirstOf("LevelManager")
 
@@ -264,8 +257,8 @@ function listen_()
             -- containing a AP Item.
             -- Also somewhere in here I need to get the currentLevelID, since treasure chest index are locally 
             -- bound to the area.
-
             SendLocationCheck(CurrentLevel,Chest.TreasureIndex)
+
         end)
 
         RegisterHook("/Game/Item/BP/ItemFunction.ItemFunction_C:AddBackpackItem", function(Context,ItemID)
@@ -310,10 +303,35 @@ function listen_()
                 local TextDB = StaticFindObject("/Game/GameText/Database/GameTextEN.GameTextEN")
 
                 -- ### Currently disabled below code because TX_NA_AP_ITM_ does not exist yet
-                -- TextDB:FindRow("TX_NA_" .. APItemLabel).Text = FText("VeryCoolApItem for VeryCoolAPPlayer")
+                if (TextDB:FindRow("TX_NA_" .. APItemLabel) and TextDB:FindRow("TX_NA_" .. APItemLabel):IsValid()) then
+                    -- TextDB:FindRow("TX_NA_" .. APItemLabel).Text = FText("Overriding Text of AP Item 1!")
+                    -- print("success!")
+                    local test = TextDB:FindRow("TX_NA_" .. APItemLabel).Text
+                    print("Item Label: " .. tostring(test:ToString()))
+                else 
+                    print("Failed to find Text for Item label: TX_NA_" .. APItemLabel)
+                end
 
             end
 
+        end)
+
+        -- void SubMissionEnd(FName SubMissionLabel, int32 ClearIndex, class UObject* __WorldContext);
+        RegisterHook("/Game/Mission/BP/MissionFunctionBP.MissionFunctionBP_C:SubMissionEnd", function() 
+            print("Submission finished!")
+        end)
+
+        -- void SetCharacterMissionProcessCnt(int32 CharacterID, int32 MainMissionProgressCnt);
+        RegisterHook("/Game/System/BP/SaveLoad/KSSaveGameBP.KSSaveGameBP_C:SetCharacterMissionProcessCnt", function(Context, CharacterID, MainMissionProgressCnt)
+            local CharID = CharacterID:get()
+            local MainMissionProgress = MainMissionProgressCnt:get()
+            print("Character " .. CharID .. "progressed Main Mission to " .. MainMissionProgress .. "!")
+        end)
+
+        -- void JoinCharacterToParty(EPlayableCharacterID CharacterID, bool& Result, bool& IsAddMainMember);
+        RegisterHook("/Game/System/BP/SaveLoad/KSSaveGameBP.KSSaveGameBP_C:JoinCharacterToParty", function(Context, CharacterID)
+            local CharID = CharacterID:get()
+            print("Character " .. CharID .. " was added to the party!")
         end)
 
         -- RegisterHook("/Game/Library/LibUIUtil.LibUIUtil_C:LevelChangeNotificationStart", function(Context,LevelID)
